@@ -34,7 +34,7 @@ function App() {
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
   const [announcements, setAnnouncements] = useState<Announcement[]>(initialAnnouncements);
 
-  const generateId = () => Math.random().toString(36).substr(2, 9);
+  const generateId = () => crypto.randomUUID();
 
   // Resident handlers
   const handleAddResident = (resident: Omit<Resident, 'id'>) => {
