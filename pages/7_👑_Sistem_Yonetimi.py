@@ -1,8 +1,9 @@
 import sys
 import os
 import pandas as pd
+import time # Liste yenilenirken bekleme için
 
-# --- PATH AYARI (Motoru bulmak için) ---
+# --- PATH AYARI (Motoru bulmak için şarttır) ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
@@ -10,13 +11,12 @@ sys.path.append(parent_dir)
 
 import streamlit as st
 import db_api
-import time # Yenileme için kullanılıyor
 
 st.set_page_config(page_title="Sistem Yönetimi", page_icon="👑")
 
 # 1. GÜVENLİK KONTROLÜ (Sadece Süper Admin Girebilir)
 if 'user' not in st.session_state or st.session_state['user'] is None:
-    st.warning("Lütfen giriş yapınız.")
+    st.warning("Lütfen önce giriş yapınız.")
     st.stop()
 
 user = st.session_state['user']
@@ -48,16 +48,21 @@ with tab1:
             
             if btn_firma_ekle:
                 if firma_ad:
+                    # GÜVENLİK FİLTRESİ (Sanitizasyon)
+                    safe_firma_ad = firma_ad.replace("'", "''")
+                    safe_yetkili = yetkili.replace("'", "''")
+                    safe_tel = tel.replace("'", "''")
+
                     # SQL: INSERT INTO firmalar
-                    sql = f"INSERT INTO firmalar (ad, yetkili_ad, telefon) VALUES ('{firma_ad}', '{yetkili}', '{tel}')"
+                    sql = f"INSERT INTO firmalar (ad, yetkili_ad, telefon) VALUES ('{safe_firma_ad}', '{safe_yetkili}', '{safe_tel}')"
                     success, msg = db_api.execute_sql(sql)
                     if success:
                         st.success(f"✅ '{firma_ad}' başarıyla oluşturuldu! Sayfa yenileniyor...")
-                        # Yenileme: Liste güncellensin
+                        # Liste yenilensin (Önemli fix)
                         time.sleep(0.5) 
                         st.rerun()
                     else:
-                        st.error(f"Hata: {msg}")
+                        st.error(f"❌ Hata: {msg}")
                 else:
                     st.warning("Firma adı boş olamaz.")
 
@@ -102,13 +107,16 @@ with tab2:
             new_pass = st.text_input("Şifre", type="password")
             new_name = st.text_input("Ad Soyad")
             
-            # Rol seçimi (Sadece firma admini veya personel ekleyebilir)
+            # Rol seçimi
             new_role = st.selectbox("Yetki Seviyesi", ["firma_admin", "personel"])
             
             btn_user_ekle = st.form_submit_button("Kullanıcıyı Oluştur")
             
             if btn_user_ekle:
                 if new_email and new_pass:
+                    # GÜVENLİK FİLTRESİ
+                    safe_name = new_name.replace("'", "''")
+
                     # Email kontrolü (Unique)
                     check = db_api.sql_to_dataframe(f"SELECT id FROM kullanicilar WHERE email = '{new_email}'")
                     if not check.empty:
@@ -117,7 +125,7 @@ with tab2:
                         # SQL: INSERT INTO kullanicilar
                         sql = f"""
                             INSERT INTO kullanicilar (firma_id, email, sifre, ad_soyad, rol) 
-                            VALUES ({secilen_firma_id}, '{new_email}', '{new_pass}', '{new_name}', '{new_role}')
+                            VALUES ({secilen_firma_id}, '{new_email}', '{new_pass}', '{safe_name}', '{new_role}')
                         """
                         success, msg = db_api.execute_sql(sql)
                         if success:
