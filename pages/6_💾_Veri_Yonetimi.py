@@ -1,15 +1,17 @@
-
 import sys
 import os
 
-# Bu 2 satır, Python'un ana klasördeki dosyaları (db_api.py) görmesini sağlar
+# --- BU KISIM KRİTİK (Path Ayarı) ---
+# Dosyanın bulunduğu klasörü al
 current_dir = os.path.dirname(os.path.abspath(__file__))
+# Bir üst klasörü (ana dizini) bul
 parent_dir = os.path.dirname(current_dir)
+# Python'un arama yoluna ekle
 sys.path.append(parent_dir)
+# ------------------------------------
 
 import streamlit as st
-import db_api # Az önce oluşturduğumuz dosya
-
+import db_api  # Artık hata vermeden bulacak
 st.set_page_config(page_title="Veri Yönetimi", page_icon="💾")
 
 st.header("💾 Veritabanı Yönetimi (HTTP API)")
