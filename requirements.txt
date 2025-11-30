@@ -2,3 +2,4 @@ streamlit
 pandas
 sqlalchemy
 faker
+sqlalchemy-libsql
