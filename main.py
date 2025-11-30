@@ -1,48 +1,63 @@
 import streamlit as st
-# Veritabanı durumunu öğrenmek için database dosyasından o değişkeni çağırıyoruz
-from database import IS_TURSO 
+import db_api  # Yeni motorumuz
+import time
 
 # Sayfa Ayarları
-st.set_page_config(page_title="Site Yönetim MVP", page_icon="🏢", layout="wide")
+st.set_page_config(page_title="SaaS Site Yönetim", page_icon="🏢", layout="centered")
 
-st.title("🏢 Profesyonel Site Yönetim Paneli")
+# --- CSS İLE GÜZELLEŞTİRME ---
+st.markdown("""
+<style>
+    .stTextInput input { padding: 10px; }
+    .stButton button { width: 100%; padding: 10px; font-weight: bold; }
+    div[data-testid="stForm"] { border: 1px solid #ddd; padding: 20px; border-radius: 10px; }
+</style>
+""", unsafe_allow_html=True)
 
-# Basit Oturum Yönetimi (Session State)
-if 'giris_yapildi' not in st.session_state:
-    st.session_state['giris_yapildi'] = False
+# --- OTURUM KONTROLÜ ---
+if 'user' not in st.session_state:
+    st.session_state['user'] = None
 
-if not st.session_state['giris_yapildi']:
-    st.info("Lütfen sisteme giriş yapın. (Demo Şifre: admin)")
-    sifre = st.text_input("Şifre", type="password")
+# --- GİRİŞ YAPILMIŞSA (DASHBOARD) ---
+if st.session_state['user']:
+    user = st.session_state['user']
     
-    if st.button("Giriş Yap"):
-        if sifre == "admin":
-            st.session_state['giris_yapildi'] = True
-            st.success("Giriş Başarılı! Yan menüden işlemlere başlayabilirsiniz.")
-            st.rerun()
-        else:
-            st.error("Hatalı şifre!")
+    st.title(f"Hoş Geldiniz, {user['ad_soyad']}")
+    st.info(f"Yetki: {user['rol']} | ID: {user['id']}")
+    
+    st.write("Sol menüden işlemlere başlayabilirsiniz.")
+    
+    if st.button("Çıkış Yap", type="primary"):
+        st.session_state['user'] = None
+        st.rerun()
+
+# --- GİRİŞ EKRANI (LOGIN) ---
 else:
-    # --- BURASI YENİ EKLENDİ ---
-    # Otomatik menünün altına durum kutusu ekliyoruz
-    with st.sidebar:
-        st.divider() # Çizgi çek
-        st.subheader("Sistem Durumu")
-        if IS_TURSO:
-            st.success("🟢 Bağlantı: BULUT (Turso)")
-            st.caption("Veriler güvende ve kalıcı.")
-        else:
-            st.error("🔴 Bağlantı: YEREL (Dosya)")
-            st.warning("⚠️ Veriler sunucu kapanınca silinir!")
-    # ---------------------------
-
-    st.write("### Hoş Geldiniz!")
-    st.write("Sol taraftaki menüden yapmak istediğiniz işlemi seçin.")
+    st.header("🏢 Site Yönetim Platformu")
+    st.caption("SaaS Yönetim Paneli")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.info("💡 **İpucu:** Önce 'Siteler' menüsünden bir site ekleyerek başlayın.")
-    with col2:
-        if st.button("Çıkış Yap"):
-            st.session_state['giris_yapildi'] = False
-            st.rerun()
+    with st.form("login_form"):
+        email = st.text_input("E-Posta", placeholder="admin@sistem.com")
+        password = st.text_input("Şifre", type="password", placeholder="******")
+        
+        submit = st.form_submit_button("Giriş Yap")
+        
+        if submit:
+            if not email or not password:
+                st.warning("Lütfen alanları doldurun.")
+            else:
+                # TURSO SORGUSU (SQL Injection'a karşı basit önlem string format ile)
+                sql = f"SELECT * FROM kullanicilar WHERE email = '{email}' AND sifre = '{password}'"
+                
+                # Yeni motorumuzla sorgula
+                df = db_api.sql_to_dataframe(sql)
+                
+                if not df.empty:
+                    # Kullanıcı bulundu
+                    user_data = df.iloc[0].to_dict()
+                    st.session_state['user'] = user_data
+                    st.success("Giriş Başarılı! Yönlendiriliyorsunuz...")
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.error("❌ Hatalı E-posta veya Şifre!")
