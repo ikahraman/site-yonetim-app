@@ -1,7 +1,7 @@
 import sys
 import os
 import pandas as pd
-import time # Liste yenilenirken bekleme için
+import time 
 
 # --- PATH AYARI (Motoru bulmak için şarttır) ---
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -13,6 +13,13 @@ import streamlit as st
 import db_api
 
 st.set_page_config(page_title="Sistem Yönetimi", page_icon="👑")
+
+# --- ÖNELLEK KIRMA (CACHE BUSTING) İÇİN DEĞİŞKEN ---
+# Bu değişken her başarılı eklemeden sonra artırılacak.
+if 'firma_guncel_sayac' not in st.session_state:
+    st.session_state['firma_guncel_sayac'] = 0
+# ----------------------------------------------------
+
 
 # 1. GÜVENLİK KONTROLÜ (Sadece Süper Admin Girebilir)
 if 'user' not in st.session_state or st.session_state['user'] is None:
@@ -58,7 +65,10 @@ with tab1:
                     success, msg = db_api.execute_sql(sql)
                     if success:
                         st.success(f"✅ '{firma_ad}' başarıyla oluşturuldu! Sayfa yenileniyor...")
-                        # Liste yenilensin (Önemli fix)
+                        
+                        # --- ÖNEMLİ DÜZELTME: SAYACI ARTIR ---
+                        st.session_state['firma_guncel_sayac'] += 1
+                        
                         time.sleep(0.5) 
                         st.rerun()
                     else:
@@ -69,8 +79,12 @@ with tab1:
     # B. FİRMA LİSTESİ
     with col2:
         st.subheader("Mevcut Müşteri Firmalar")
-        # SQL: SELECT * FROM firmalar
-        df_firmalar = db_api.sql_to_dataframe("SELECT * FROM firmalar ORDER BY id DESC")
+        
+        # --- ÖNEMLİ DÜZELTME: CACHE BUSTING SQL SORGUSU ---
+        # Sondaki '--' ile başlayan kısım bir SQL yorumudur, veritabanına bir etkisi yoktur 
+        # ancak Streamlit'e sorgunun değiştiğini söyler.
+        sql_listele = f"SELECT * FROM firmalar ORDER BY id DESC -- cache={st.session_state['firma_guncel_sayac']}"
+        df_firmalar = db_api.sql_to_dataframe(sql_listele)
         
         if not df_firmalar.empty:
             st.dataframe(
@@ -93,7 +107,9 @@ with tab2:
     st.subheader("Firma Yöneticisi Tanımla")
     
     # Firma Seçimi
-    df_firmalar = db_api.sql_to_dataframe("SELECT id, ad FROM firmalar")
+    # Kullanıcı yönetimindeki listeleme için de cache busting kullanabiliriz.
+    sql_firma_secim = f"SELECT id, ad FROM firmalar -- cache={st.session_state['firma_guncel_sayac']}"
+    df_firmalar = db_api.sql_to_dataframe(sql_firma_secim)
     
     if df_firmalar.empty:
         st.warning("Önce firma oluşturmalısınız.")
