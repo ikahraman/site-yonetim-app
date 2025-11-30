@@ -1,44 +1,49 @@
 import sys
 import os
+import pandas as pd
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# --- PATH AYARI ---
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+# ------------------
 
 import streamlit as st
-import pandas as pd
-from database import SessionLocal
-from models import Sakin, Daire, Site
+import db_api  # YENİ MOTOR
 
 st.set_page_config(page_title="Sakinler Listesi", page_icon="👥")
 
-if not st.session_state.get('giris_yapildi'):
+if 'user' not in st.session_state or st.session_state['user'] is None:
     st.warning("Lütfen giriş yapınız.")
     st.stop()
 
 st.header("👥 Site Sakinleri Listesi")
 
-db = SessionLocal()
+# Site Seçimi
+df_siteler = db_api.sql_to_dataframe("SELECT id, ad FROM siteler")
 
-siteler = db.query(Site).all()
-site_listesi = {s.ad: s.id for s in siteler}
+if df_siteler.empty:
+    st.warning("Kayıtlı site bulunamadı.")
+    st.stop()
 
-secilen_site_ad = st.selectbox("Hangi Sitenin Sakinleri?", list(site_listesi.keys()))
+site_dict = dict(zip(df_siteler['ad'], df_siteler['id']))
+secilen_site_ad = st.selectbox("Hangi Sitenin Sakinleri?", list(site_dict.keys()))
 
 if secilen_site_ad:
-    site_id = site_listesi[secilen_site_ad]
+    site_id = site_dict[secilen_site_ad]
     
-    sorgu = db.query(
-        Daire.blok,
-        Daire.kapi_no,
-        Sakin.ad_soyad,
-        Sakin.telefon,
-        Sakin.tip
-    ).join(Daire).filter(Daire.site_id == site_id).all()
+    # SQL ile veri çekme
+    sql = f"""
+        SELECT d.blok, d.kapi_no, s.ad_soyad, s.telefon, s.tip
+        FROM sakinler s
+        JOIN daireler d ON s.daire_id = d.id
+        WHERE d.site_id = {site_id}
+    """
     
-    if sorgu:
-        df = pd.DataFrame(sorgu, columns=["Blok", "Kapı No", "Ad Soyad", "Telefon", "Tipi"])
+    df = db_api.sql_to_dataframe(sql)
+    
+    if not df.empty:
         st.dataframe(df, use_container_width=True, hide_index=True)
         st.caption(f"Toplam {len(df)} kişi listelendi.")
     else:
-        st.warning("Kayıt bulunamadı.")
-
-db.close()
+        st.warning("Bu sitede kayıtlı sakin bulunamadı.")
