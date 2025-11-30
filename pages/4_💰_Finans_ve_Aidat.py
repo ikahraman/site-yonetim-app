@@ -2,71 +2,71 @@ import sys
 import os
 from datetime import datetime
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# --- PATH AYARI ---
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+# ------------------
 
 import streamlit as st
-import pandas as pd
-from database import SessionLocal
-from models import Site, FinansHareket
+import db_api
 
 st.set_page_config(page_title="Finans", page_icon="💰")
 
-if not st.session_state.get('giris_yapildi'):
+if 'user' not in st.session_state or st.session_state['user'] is None:
     st.warning("Lütfen giriş yapınız.")
     st.stop()
 
-db = SessionLocal()
+user_id = st.session_state['user']['id']
+# Şimdilik varsayılan firma ID 1 kabul edelim (Süper admin mantığı)
+firma_id = 1 
 
 st.header("💰 Finansal İşlemler")
 
-siteler = db.query(Site).all()
-site_isimleri = {site.ad: site.id for site in siteler}
-secilen_site_ad = st.selectbox("Site Seçiniz", list(site_isimleri.keys()))
+# 1. SİTE SEÇİMİ (Veritabanından Doldur)
+df_siteler = db_api.sql_to_dataframe("SELECT id, ad FROM siteler")
 
-if secilen_site_ad:
-    secilen_site_id = site_isimleri[secilen_site_ad]
+if df_siteler.empty:
+    st.error("Hiç site tanımlı değil! Önce 'Veri Yönetimi'nden örnek veri basın.")
+    st.stop()
 
-    # --- YENİ İŞLEM EKLEME ---
-    with st.expander("➕ Yeni Finansal İşlem Ekle"):
-        with st.form("finans_form"):
-            col1, col2 = st.columns(2)
-            islem_turu = col1.selectbox("İşlem Türü", ["borc", "tahsilat", "gider"])
-            tutar = col2.number_input("Tutar (TL)", min_value=0.0, step=100.0)
-            aciklama = st.text_input("Açıklama", "Ocak 2025 Aidat")
-            
-            kaydet = st.form_submit_button("Kaydet")
-            
-            if kaydet:
-                yeni_hareket = FinansHareket(
-                    site_id=secilen_site_id,
-                    tur=islem_turu,
-                    tutar=tutar,
-                    aciklama=aciklama,
-                    tarih=datetime.now()
-                )
-                db.add(yeni_hareket)
-                db.commit()
-                st.success("İşlem Başarıyla Kaydedildi!")
-                st.rerun()
+site_dict = dict(zip(df_siteler['ad'], df_siteler['id']))
+secilen_site_ad = st.selectbox("Site Seçiniz", list(site_dict.keys()))
+secilen_site_id = site_dict[secilen_site_ad]
 
-    # --- HAREKET GEÇMİŞİ ---
-    st.subheader(f"{secilen_site_ad} - Hesap Hareketleri")
-    
-    hareketler = db.query(FinansHareket).filter(FinansHareket.site_id == secilen_site_id).order_by(FinansHareket.tarih.desc()).all()
-    
-    if hareketler:
-        data = []
-        for h in hareketler:
-            data.append({
-                "Tarih": h.tarih,
-                "Tür": h.tur,
-                "Açıklama": h.aciklama,
-                "Tutar": h.tutar
-            })
+# --- YENİ İŞLEM EKLEME ---
+with st.expander("➕ Yeni Gelir/Gider Ekle", expanded=True):
+    with st.form("finans_form"):
+        col1, col2 = st.columns(2)
+        islem_turu = col1.selectbox("İşlem Türü", ["tahsilat", "gider", "borc"])
+        tutar = col2.number_input("Tutar (TL)", min_value=0.0, step=100.0)
+        aciklama = st.text_input("Açıklama", "Ocak 2025 Aidat")
         
-        df = pd.DataFrame(data)
-        st.dataframe(df, use_container_width=True)
-    else:
-        st.info("Bu site için henüz işlem kaydı yok.")
+        kaydet = st.form_submit_button("Kaydet")
+        
+        if kaydet:
+            # SQL INSERT SORGUSU
+            # daire_id şimdilik 0 (Genel) yapıyoruz, detaylandırılabilir.
+            sql = f"""
+                INSERT INTO hareketler (firma_id, site_id, daire_id, tur, aciklama, tutar, kaydeden_user_id)
+                VALUES ({firma_id}, {secilen_site_id}, 0, '{islem_turu}', '{aciklama}', {tutar}, {user_id})
+            """
+            
+            success, msg = db_api.execute_sql(sql)
+            
+            if success:
+                st.success("İşlem Başarıyla Kaydedildi!")
+                st.rerun() # Listeyi güncelle
+            else:
+                st.error(f"Kayıt Hatası: {msg}")
 
-db.close()
+# --- GEÇMİŞ LİSTESİ ---
+st.subheader(f"{secilen_site_ad} - Hesap Hareketleri")
+
+sql_gecmis = f"SELECT tarih, tur, aciklama, tutar FROM hareketler WHERE site_id = {secilen_site_id} ORDER BY id DESC"
+df_gecmis = db_api.sql_to_dataframe(sql_gecmis)
+
+if not df_gecmis.empty:
+    st.dataframe(df_gecmis, use_container_width=True)
+else:
+    st.info("Bu site için kayıt bulunamadı.")

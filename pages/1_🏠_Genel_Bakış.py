@@ -1,43 +1,64 @@
 import sys
 import os
 
-# Ana dizini görmesi için (modül hatasını çözer)
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# --- PATH AYARI (Hata almamak için) ---
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+# --------------------------------------
 
 import streamlit as st
+import db_api
 import pandas as pd
-from database import SessionLocal
-from models import Site, FinansHareket
 
 st.set_page_config(page_title="Genel Bakış", page_icon="🏠")
 
-if not st.session_state.get('giris_yapildi'):
-    st.warning("Lütfen ana sayfadan giriş yapınız.")
+# Giriş Kontrolü
+if 'user' not in st.session_state or st.session_state['user'] is None:
+    st.warning("Lütfen önce giriş yapınız.")
     st.stop()
 
 st.header("📊 Genel Durum Özeti")
 
-db = SessionLocal()
+# --- VERİLERİ TURSO'DAN ÇEK ---
+# 1. Site Sayısı
+df_siteler = db_api.sql_to_dataframe("SELECT COUNT(*) as sayi FROM siteler")
+toplam_site = df_siteler.iloc[0]['sayi'] if not df_siteler.empty else 0
 
-# Metrikleri Hesapla
-toplam_site = db.query(Site).count()
+# 2. Finansal Durum (Gelir - Gider)
+df_finans = db_api.sql_to_dataframe("SELECT tur, SUM(tutar) as toplam FROM hareketler GROUP BY tur")
 
-tum_hareketler = db.query(FinansHareket).all()
-toplam_tahsilat = sum([h.tutar for h in tum_hareketler if h.tur == "tahsilat"])
-bekleyen_borc = sum([h.tutar for h in tum_hareketler if h.tur == "borc"])
+toplam_tahsilat = 0
+toplam_gider = 0
 
+if not df_finans.empty:
+    try:
+        # Tutar sütununu sayıya çevir (garanti olsun)
+        df_finans['toplam'] = pd.to_numeric(df_finans['toplam'])
+        
+        # Filtrele
+        tahsilat_row = df_finans[df_finans['tur'] == 'tahsilat']
+        gider_row = df_finans[df_finans['tur'] == 'gider']
+        
+        if not tahsilat_row.empty: toplam_tahsilat = tahsilat_row.iloc[0]['toplam']
+        if not gider_row.empty: toplam_gider = gider_row.iloc[0]['toplam']
+    except:
+        pass
+
+kasa_durumu = toplam_tahsilat - toplam_gider
+
+# --- METRİKLERİ GÖSTER ---
 col1, col2, col3 = st.columns(3)
 col1.metric("Yönetilen Site", f"{toplam_site} Adet")
-col2.metric("Toplam Tahsilat", f"{toplam_tahsilat:,.0f} TL")
-col3.metric("Bekleyen Alacak", f"{bekleyen_borc:,.0f} TL", delta_color="inverse")
+col2.metric("Toplam Tahsilat", f"{toplam_tahsilat:,.2f} TL")
+col3.metric("Net Kasa", f"{kasa_durumu:,.2f} TL", delta_color="normal")
 
 st.divider()
 
-st.subheader("Finansal Hareket Grafiği")
-if tum_hareketler:
-    df = pd.DataFrame([h.__dict__ for h in tum_hareketler])
-    st.bar_chart(df, x="tarih", y="tutar", color="tur")
+# --- GRAFİK ---
+st.subheader("Son Hareketler")
+df_hareketler = db_api.sql_to_dataframe("SELECT tarih, aciklama, tur, tutar FROM hareketler ORDER BY id DESC LIMIT 5")
+if not df_hareketler.empty:
+    st.dataframe(df_hareketler, use_container_width=True)
 else:
-    st.info("Henüz veri girişi yapılmamış. 'Ayarlar' menüsünden demo veri yükleyebilirsiniz.")
-
-db.close()
+    st.info("Henüz veri girişi yok.")
