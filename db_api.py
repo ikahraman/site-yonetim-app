@@ -83,3 +83,27 @@ def sql_to_dataframe(sql):
     except Exception as e:
         # Veri yoksa veya hata varsa boş dön
         return pd.DataFrame()
+       
+       
+# ... mevcut kodların altına ...
+
+def get_firma_filter(user):
+    """
+    Giriş yapan kullanıcının rolüne göre SQL WHERE şartı döndürür.
+    """
+    if not user:
+        return "1=0" # Giriş yoksa hiçbir şey gösterme
+        
+    if user['rol'] == 'super_admin':
+        return "1=1" # Her şeyi gör
+        
+    elif user['rol'] == 'firma_admin':
+        # Sadece kendi firmasını gör
+        return f"firma_id = {user['firma_id']}"
+        
+    elif user['rol'] == 'site_yoneticisi':
+        # (İleride eklenecekse) Sadece atandığı siteyi gör
+        # Burada user tablosunda 'site_id' tutmamız gerekebilir.
+        pass
+        
+    return "1=0" # Yetkisiz erişim
