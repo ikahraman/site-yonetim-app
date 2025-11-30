@@ -1,4 +1,6 @@
 import streamlit as st
+# Veritabanı durumunu öğrenmek için database dosyasından o değişkeni çağırıyoruz
+from database import IS_TURSO 
 
 # Sayfa Ayarları
 st.set_page_config(page_title="Site Yönetim MVP", page_icon="🏢", layout="wide")
@@ -21,6 +23,19 @@ if not st.session_state['giris_yapildi']:
         else:
             st.error("Hatalı şifre!")
 else:
+    # --- BURASI YENİ EKLENDİ ---
+    # Otomatik menünün altına durum kutusu ekliyoruz
+    with st.sidebar:
+        st.divider() # Çizgi çek
+        st.subheader("Sistem Durumu")
+        if IS_TURSO:
+            st.success("🟢 Bağlantı: BULUT (Turso)")
+            st.caption("Veriler güvende ve kalıcı.")
+        else:
+            st.error("🔴 Bağlantı: YEREL (Dosya)")
+            st.warning("⚠️ Veriler sunucu kapanınca silinir!")
+    # ---------------------------
+
     st.write("### Hoş Geldiniz!")
     st.write("Sol taraftaki menüden yapmak istediğiniz işlemi seçin.")
     
