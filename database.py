@@ -23,27 +23,28 @@ except Exception:
 # 2. Bağlantı Mantığı
 if IS_TURSO and db_url:
     # --- TURSO MODU ---
-    # URL Temizliği
-    if db_url.startswith("libsql://"):
-        db_url = db_url.replace("libsql://", "")
-    elif db_url.startswith("https://"):
-        db_url = db_url.replace("https://", "")
     
-    # URL Oluşturma
-    DATABASE_URL = f"sqlite+libsql://{db_url}/?authToken={db_token}"
+    # URL Temizliği: 'libsql://' protokolünü tamamen kaldırıp sadece domain'i alıyoruz.
+    if "://" in db_url:
+        db_url = db_url.split("://")[1]
+    
+    # URL Oluşturma (Kritik Düzeltme Burası)
+    # 1. Protokolü sqlite+libsql yapıyoruz.
+    # 2. Domain'i ekliyoruz.
+    # 3. Sonuna secure=true ekleyerek 308 hatasını engelliyoruz.
+    DATABASE_URL = f"sqlite+libsql://{db_url}/?authToken={db_token}&secure=true"
+    
     connect_args = {'check_same_thread': False}
     
-    # ⚠️ KRİTİK DEĞİŞİKLİK: Fallback (Yedek) mekanizmasını kaldırdık.
-    # Turso'da hata varsa direkt patlasın ki görelim.
     try:
         engine = create_engine(DATABASE_URL, connect_args=connect_args)
         SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
         Base.metadata.create_all(bind=engine)
         print("✅ Turso bağlantısı başarılı!")
     except Exception as e:
-        # Hatayı Streamlit ekranına bas
         st.error(f"🚨 TURSO BAĞLANTI HATASI: {e}")
-        st.stop() # Uygulamayı durdur
+        st.info("İpucu: Secrets ayarlarındaki URL'nin başında 'libsql://' olduğundan emin olun.")
+        st.stop()
 
 else:
     # --- YEREL MOD ---
